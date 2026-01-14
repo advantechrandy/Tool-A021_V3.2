@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雙相浸沒式冷卻冷卻量計算</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f1115;
+            color: #cbd5e1; /* 調整為更亮的藍灰色 */
+            font-family: 'JetBrains Mono', 'PingFang TC', monospace;
+        }
+        .panel {
+            background: #1a1d23;
+            border: 1px solid #334155;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+        .input-dark {
+            background-color: #0f1115;
+            border: 1px solid #475569; /* 稍微加亮邊框 */
+            color: #f8fafc;
+        }
+        .input-dark:focus {
+            border-color: #10b981;
+            outline: none;
+            color: #10b981;
+        }
+        .accent-green {
+            color: #10b981;
+            text-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+        }
+        .terminal-header {
+            border-bottom: 1px solid #334155;
+        }
+        /* 隱藏 Chrome, Safari, Edge, Opera 的輸入框箭頭 */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* 隱藏 Firefox 的輸入框箭頭 */
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-5xl mx-auto">
+        <header class="flex flex-col md:flex-row justify-between items-end mb-8 pb-4 terminal-header">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-100 tracking-tight uppercase">
+                    2-Phase Immersion <span class="text-emerald-500">Analyzer v3.2</span>
+                </h1>
+                <p class="text-slate-400 text-xs mt-1 font-medium tracking-wider">雙相浸沒式冷卻蒸發量補液量計算</p>
+            </div>
+            <div class="text-[10px] font-mono text-slate-500 mt-4 md:mt-0 leading-tight text-right">
+                SYSTEM: STANDBY<br>
+                CREATED BY RANDY CHEN
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 左側：參數設定 -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="panel p-6 rounded-md">
+                    <h2 class="text-[11px] font-bold text-slate-300 uppercase tracking-[0.2em] mb-6 flex items-center">
+                        <span class="w-1.5 h-1.5 bg-emerald-500 mr-2"></span>
+                        輸入參數 / Input Parameters
+                    </h2>
+                    
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-tight">冷卻液類型 (Fluid Type)</label>
+                            <select id="fluidPresets" onchange="applyPreset()" class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:border-emerald-500 outline-none">
+                                <option value="fluorinated_2p" selected>電子氟化液 (Novec 7100 等級)</option>
+                                <option value="custom">-- 手動自定義 --</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-tight">總發熱功率 Q (kW)</label>
+                            <input type="number" id="power" value="50" class="w-full p-2.5 rounded input-dark font-mono text-lg text-center" placeholder="0.00">
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-tight">蒸發焓 Hvap (kJ/kg)</label>
+                            <input type="number" id="hVap" value="112" step="0.1" class="w-full p-2.5 rounded input-dark font-mono text-lg text-center">
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-tight">液體密度 ρ (kg/m³)</label>
+                            <input type="number" id="density" value="1510" class="w-full p-2.5 rounded input-dark font-mono text-lg text-center">
+                        </div>
+                    </div>
+
+                    <button onclick="calculate()" class="w-full mt-10 bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-bold py-3.5 rounded transition-all uppercase tracking-widest text-xs">
+                        執行計算
+                    </button>
+                </div>
+            </div>
+
+            <!-- 右側：數據面板 -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="panel p-8 rounded-md min-h-[420px]">
+                    <h2 class="text-[11px] font-bold text-slate-300 uppercase tracking-[0.2em] mb-8 flex items-center border-b border-slate-800 pb-3">
+                        數據監控中心 / Monitor Center
+                    </h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- 蒸發質量流率 -->
+                        <div class="space-y-2">
+                            <div class="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Evaporation Rate (ṁ)</div>
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-5xl font-light accent-green font-mono italic" id="massFlow">--</span>
+                                <span class="text-slate-500 text-sm font-bold">kg/s</span>
+                            </div>
+                        </div>
+
+                        <!-- 體積流量 -->
+                        <div class="space-y-2">
+                            <div class="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Liquid Equiv. Flow (V)</div>
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-5xl font-light accent-green font-mono italic" id="volFlowLpm">--</span>
+                                <span class="text-slate-500 text-sm font-bold">LPM</span>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-2 font-mono" id="volFlowM3h">-- m³/h</div>
+                        </div>
+                    </div>
+
+                    <!-- 公式與狀態摘要 -->
+                    <div class="mt-16 pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between gap-8">
+                        <div class="text-[10px] text-slate-400 font-mono space-y-1">
+                            <p class="text-slate-300 font-bold mb-2 uppercase">Physical Principles:</p>
+                            <p>Latent Heat: Q = ṁ · Hvap</p>
+                            <p>Mass: ṁ = Q / Hvap</p>
+                            <p>Volume: V = ṁ / ρ</p>
+                        </div>
+                        <div class="bg-slate-900/40 p-5 border border-slate-800 rounded min-w-[240px]">
+                            <div class="text-[9px] text-slate-400 mb-3 uppercase tracking-widest">Fluid Properties</div>
+                            <div class="flex justify-between text-xs mb-2">
+                                <span class="text-slate-400">Density:</span>
+                                <span class="text-slate-200 font-mono" id="summaryRho">1510 kg/m³</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-400">Latent Heat:</span>
+                                <span class="text-slate-200 font-mono" id="summaryHvap">112.0 kJ/kg</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 底部訊息 -->
+                <div class="bg-slate-800/20 border border-slate-800 p-4 rounded text-[11px] text-slate-400 flex items-start gap-4">
+                    <div class="text-emerald-500 font-bold">INFO:</div>
+                    <div class="leading-relaxed">
+                        Evaporation Rate對應冷凝器 (Condenser) 設計，如果使用的是「被動循環」系統，工程師需要知道每秒有多少蒸汽產生，以此計算冷凝管盤管需要多大的換熱面積來把這些氣體「抓回來」變回液體。<br><br>
+                        Liquid Equivalent Flow對應補液或泵浦設計，如果使用的是「主動循環」系統，這個數值告訴你補給泵浦 (Refill Pump) 至少需要提供多大的流量，才能維持槽體內的液面高度，不至於因為沸騰蒸發而乾涸。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="mt-12 text-center text-slate-600 text-[9px] uppercase tracking-[0.3em]">
+            Analysis Terminal // Phase-Change Management // 2024
+        </footer>
+    </div>
+
+    <script>
+        // 阻擋滑鼠右鍵選單
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        }, false);
+
+        const fluidData = {
+            fluorinated_2p: { hVap: 112.0, rho: 1510 }
+        };
+
+        function applyPreset() {
+            const preset = document.getElementById('fluidPresets').value;
+            if (preset !== 'custom') {
+                document.getElementById('hVap').value = fluidData[preset].hVap;
+                document.getElementById('density').value = fluidData[preset].rho;
+            }
+            calculate();
+        }
+
+        function calculate() {
+            const Q = parseFloat(document.getElementById('power').value);
+            const Hvap = parseFloat(document.getElementById('hVap').value);
+            const rho = parseFloat(document.getElementById('density').value);
+
+            document.getElementById('summaryHvap').innerText = (Hvap || 0).toFixed(1) + ' kJ/kg';
+            document.getElementById('summaryRho').innerText = (rho || 0) + ' kg/m³';
+
+            if (isNaN(Q) || isNaN(Hvap) || isNaN(rho) || Hvap <= 0) {
+                displayError();
+                return;
+            }
+
+            const m_dot = Q / Hvap;
+            const v_dot_m3s = m_dot / rho;
+            const v_dot_m3h = v_dot_m3s * 3600;
+            const v_dot_lpm = v_dot_m3s * 1000 * 60;
+
+            document.getElementById('massFlow').innerText = m_dot.toFixed(4);
+            document.getElementById('volFlowLpm').innerText = v_dot_lpm.toFixed(2);
+            document.getElementById('volFlowM3h').innerText = `${v_dot_m3h.toFixed(3)} m³/h`;
+        }
+
+        function displayError() {
+            document.getElementById('massFlow').innerText = "---";
+            document.getElementById('volFlowLpm').innerText = "---";
+            document.getElementById('volFlowM3h').innerText = "-- m³/h";
+        }
+
+        window.onload = calculate;
+    </script>
+</body>
+</html>
